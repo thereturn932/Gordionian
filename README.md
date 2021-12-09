@@ -5,9 +5,9 @@ GordionianTV is a community run production company project. Our aim is to let co
 ### How GordionianTV works
 <br />
 
-- First genres for the next production is selected
+- First a voting starts for selecting genres for the next production.
 
-- Then, an acceptance phase starts and continues for 3 three days. At the end of this phase if selected genres are rejected a new voting opens.
+- When genre voting ends, an acceptance phase starts and continues for 3 three days. At the end of this phase if selected genres are rejected a new voting opens.
 
 - After, genre voting ends a new time period starts for movie makers to make a short movie about current genre.
 
