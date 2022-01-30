@@ -1,4 +1,4 @@
-//SPDX-License-Identifier: Unlicense
+//SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 import "hardhat/console.sol";
@@ -15,7 +15,6 @@ contract GordionianGenreVoter is Ownable{
       bytes32("Disaster"),
       bytes32("Documentary"),
       bytes32("Drama"),
-      bytes32("Erotic"),
       bytes32("Fantasy"),
       bytes32("Horror"),
       bytes32("Musical"),
@@ -31,7 +30,6 @@ contract GordionianGenreVoter is Ownable{
       bytes32("Western")
       ];
 
-    address private owner;
     mapping(bytes32 => uint) public votes;
     mapping (bytes32 => bool) public doesExist;
     uint deadline;
@@ -40,7 +38,6 @@ contract GordionianGenreVoter is Ownable{
 
     
     constructor() {
-        owner = msg.sender;
     }
     
     function AddNewGenre(bytes32 _genreName) external onlyOwner{
@@ -60,6 +57,10 @@ contract GordionianGenreVoter is Ownable{
         //time in seconds
         votingID++;
         deadline = block.timestamp + _time;
+    }
+
+    function EndVoting() external onlyOwner{
+        deadline = block.timestamp;
     }
     
     function CheckRemainingTime() external view returns (uint){
