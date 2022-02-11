@@ -5,77 +5,198 @@ import "hardhat/console.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract GordionianParticipantVoter is Ownable{
-    struct Movie {
-        string title;
+contract GordionianParticipantVoter is Ownable {
+    IERC20 usdte = IERC20(0xc7198437980c041c805A1EDcbA50c1Ce5db95118);
+    IERC20 usdt = IERC20(0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7);
+    IERC20 usdce = IERC20(0xA7D7079b0FEaD91F3e65f86E8915Cb59c1a4C664);
+    IERC20 usdc = IERC20(0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E);
+    IERC20 dai = IERC20(0xd586E7F844cEa2F87f50152665BCbc2C279D8d70);
+
+    uint256 votingID;
+
+    struct Film {
+        bytes32 title;
         address creator;
-        uint votingSeason;
-        uint participantID;
-        string movieURL;
+        bytes32 creatorName;
+        uint256 votingSeason;
+        uint256 participantID;
+        bytes32 movieURL;
+        bytes32 contactEMail;
     }
-    uint currentSeason;
-    uint participationNumber;
-    mapping(uint => uint) public votes; /// @dev participant ID to vote number
-    mapping(address => string) creatorName;
-    mapping(address => bool) isVoted;
-    mapping(uint => Movie) movieMap;
-    uint[] currentParticipants;
-    uint votingDeadline;
+
+    struct VotingRound {
+        uint256 id;
+        Film[] films;
+        uint256[] votes;
+        uint256 deadline;
+        mapping(address => bool) isVoted;
+        bytes32[3] winners;
+    }
+
+    VotingRound[] private rounds;
+    mapping(uint => Film) private winners;
+
     IERC20 GRD;
 
-    event NewParticipant(string _title, string _creatorName, string _movieURL, uint participantID);
+    event NewParticipant(
+        bytes32 _title,
+        bytes32 _creatorName,
+        bytes32 _movieURL,
+        uint256 participantID
+    );
 
     constructor(address _GRDAddress) {
         GRD = IERC20(_GRDAddress);
+        rounds.push();
     }
 
-    function DefineGRD(address _GRDAddress) external onlyOwner{
+    function DefineGRD(address _GRDAddress) external onlyOwner {
         GRD = IERC20(_GRDAddress);
     }
 
-    function NewParticipation(string memory _title, string memory _creatorName, string memory _movieURL) external {
-        Movie memory newParticipant;
-        newParticipant.title = _title;
-        newParticipant.movieURL = _movieURL;
-        newParticipant.votingSeason = currentSeason;
-        participationNumber++;
-        newParticipant.participantID = participationNumber;
-        newParticipant.creator = msg.sender;
-        creatorName[msg.sender] = _creatorName;
-        movieMap[participationNumber] = newParticipant;
-        currentParticipants.push(participationNumber);
-
-        emit NewParticipant(_title, _creatorName, _movieURL, participationNumber);
+    function startRound(uint256 _deadline) external onlyOwner {
+        votingID++;
+        VotingRound storage newRound = rounds.push();
+        newRound.id = votingID;
+        newRound.deadline = _deadline;
+        newRound.films.push();
     }
 
-    function VoteForParticipant(uint _ID, uint amount) external {
-        require(isVoted[msg.sender] == false && 
-        GRD.allowance(msg.sender, address(this))>= amount &&
-         block.timestamp <= votingDeadline && 
-         movieMap[_ID].votingSeason == currentSeason);
-
-        votes[_ID]++;
+    function endRound(uint256 id) external onlyOwner {
+        VotingRound storage round = rounds[id];
+        round.deadline = block.timestamp;
     }
 
-    function StartNewSeason( uint duration) external onlyOwner{
-        require(votingDeadline <= block.timestamp);
-        delete currentParticipants;
-        currentSeason++;
-        votingDeadline += duration;
+    function voteFilm(
+        uint256 id,
+        uint256 _participantID,
+        bytes32 filmTitle
+    ) external {
+        VotingRound storage round = rounds[id];
+        require(
+            (keccak256(abi.encodePacked((round.films[_participantID].title))) == keccak256(abi.encodePacked((filmTitle)))),
+            "Index and title do not match"
+        );
+        require(!round.isVoted[msg.sender], "Already voted");
+        round.isVoted[msg.sender] = true;
+        round.votes[_participantID]++;
     }
 
-    function FindWinner() external view returns (string memory, uint){
-        require(votingDeadline <= block.timestamp);
-        uint256 winner = 0; 
-        uint256 i;
+    function revokeVote(
+        uint256 id,
+        uint256 _participantID,
+        bytes32 filmTitle
+    ) external {
+        VotingRound storage round = rounds[id];
+        require(
+            (keccak256(abi.encodePacked((round.films[_participantID].title))) == keccak256(abi.encodePacked((filmTitle)))),
+            "Index and title do not match"
+        );
+        require(round.isVoted[msg.sender], "Already not voted");
+        round.isVoted[msg.sender] = false;
+        round.votes[_participantID]--;
+    }
 
-        for(i = 0; i < currentParticipants.length; i++){
-            if(votes[currentParticipants[i]] > winner) {
-                winner = currentParticipants[i]; 
-            } 
+    function checkRemainingTime(uint256 id) external view returns (uint256) {
+        VotingRound storage round = rounds[id];
+        return (round.deadline - block.timestamp);
+    }
+
+    function winningFilms(uint256 id) external onlyOwner {
+        VotingRound storage round = rounds[id];
+        require(
+            block.timestamp >= round.deadline,
+            "Round has not finished yet"
+        );
+
+        uint256 pos_1;
+        uint256 pos_2;
+        uint256 pos_3;
+
+        bytes32 firstPlace;
+        bytes32 secondPlace;
+        bytes32 thirdPlace;
+
+        Film memory winner;
+
+        for (uint256 i; i < round.votes.length; i++) {
+            if (round.votes[i] >= pos_1) {
+                pos_3 = pos_2;
+                thirdPlace = secondPlace;
+                pos_2 = pos_1;
+                secondPlace = firstPlace;
+                pos_1 = round.votes[i];
+                firstPlace = round.films[i].title;
+                winner = round.films[i];
+            } else if (round.votes[i] >= pos_2) {
+                pos_3 = pos_2;
+                thirdPlace = secondPlace;
+                pos_2 = round.votes[i];
+                secondPlace = round.films[i].title;
+            } else if (round.votes[i] >= pos_3) {
+                pos_3 = round.votes[i];
+                thirdPlace = round.films[i].title;
+            }
         }
 
-        return (movieMap[winner].title, movieMap[winner].participantID);
+        winners[id] = winner;
+        round.winners = [firstPlace, secondPlace, thirdPlace];
     }
 
+    function getRoundInfo(uint256 id)
+        external
+        view
+        returns (
+            uint256,
+            uint256,
+            uint256[] memory,
+            uint256,
+            bytes32[3] memory
+        )
+    {
+        VotingRound storage round = rounds[id];
+        return (
+            round.id,
+            round.films.length,
+            round.votes,
+            round.deadline,
+            round.winners
+        );
+    }
+
+    function NewParticipation(
+        bytes32 _title,
+        bytes32 _creatorName,
+        bytes32 _movieURL,
+        bytes32 _contactEMail,
+        uint256 roundID
+    ) external {
+        VotingRound storage round = rounds[roundID];
+
+        Film memory newParticipant;
+        newParticipant.title = _title;
+        newParticipant.movieURL = _movieURL;
+        newParticipant.votingSeason = votingID;
+        newParticipant.participantID = round.films.length;
+        newParticipant.creator = msg.sender;
+        newParticipant.creatorName = _creatorName;
+        newParticipant.contactEMail = _contactEMail;
+
+        round.films.push(newParticipant);
+        round.votes.push();
+    }
+
+    function cancelParticipation(uint roundID, uint _participantID, bytes32 _title) external {
+        VotingRound storage round = rounds[roundID];
+        require((keccak256(abi.encodePacked((round.films[_participantID].title))) == keccak256(abi.encodePacked((_title)))), "titles does not match");
+        require(round.films[_participantID].creator == msg.sender, "creator does not match");
+        
+        delete round.films[_participantID];
+        delete round.votes[_participantID];
+    }
+
+    function getWinner(uint roundID) external view returns (bytes32, address, bytes32, uint,uint,bytes32,bytes32) {
+        Film storage winner = winners[roundID];
+        return (winner.title,winner.creator,winner.creatorName,winner.votingSeason,winner.participantID,winner.movieURL,winner.contactEMail);
+    } 
 }

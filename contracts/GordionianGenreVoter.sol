@@ -4,113 +4,178 @@ pragma solidity ^0.8.0;
 import "hardhat/console.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract GordionianGenreVoter is Ownable{
-  uint votingID;
-    bytes32[] public genres = [bytes32("Action"),
-     bytes32("Adventure"),
-      bytes32("Animation"),
-      bytes32("Biographical"),
-      bytes32("Comedy"),
-      bytes32("Crime"),
-      bytes32("Disaster"),
-      bytes32("Documentary"),
-      bytes32("Drama"),
-      bytes32("Fantasy"),
-      bytes32("Horror"),
-      bytes32("Musical"),
-      bytes32("Mystery"),
-      bytes32("Noir"),
-      bytes32("Romance"),
-      bytes32("Satire"),
-      bytes32("Science-Fiction"),
-      bytes32("Spy"),
-      bytes32("Teen"),
-      bytes32("Thriller"),
-      bytes32("War"),
-      bytes32("Western")
-      ];
+contract GordionianGenreVoter is Ownable {
+    uint256 votingID;
 
-    mapping(bytes32 => uint) public votes;
-    mapping (bytes32 => bool) public doesExist;
-    uint deadline;
-    bytes32[] private voters;
-    mapping (bytes32 => bool) public voted;
+    bytes32[] private genres = [
+        bytes32("Action"),
+        bytes32("Adventure"),
+        bytes32("Animation"),
+        bytes32("Biographical"),
+        bytes32("Comedy"),
+        bytes32("Crime"),
+        bytes32("Disaster"),
+        bytes32("Documentary"),
+        bytes32("Drama"),
+        bytes32("Fantasy"),
+        bytes32("Horror"),
+        bytes32("Musical"),
+        bytes32("Mystery"),
+        bytes32("Noir"),
+        bytes32("Romance"),
+        bytes32("Satire"),
+        bytes32("Science-Fiction"),
+        bytes32("Spy"),
+        bytes32("Teen"),
+        bytes32("Thriller"),
+        bytes32("War"),
+        bytes32("Western")
+    ];
 
-    
+    mapping(bytes32 => bool) private doesExist;
+
+    struct VotingRound {
+        uint256 id;
+        bytes32[] genres;
+        uint256[] votes;
+        uint256 deadline;
+        mapping(address => bool) isVoted;
+        bytes32[3] winners;
+    }
+
+    VotingRound[] private rounds;
+
     constructor() {
+        //Push first empty round to match id with array index
+        rounds.push();
     }
-    
-    function AddNewGenre(bytes32 _genreName) external onlyOwner{
-        genres.push(_genreName);
-        votes[_genreName] = 0;
-        doesExist[_genreName] = true;
+
+    function addNewGenre(bytes32 genreName) external onlyOwner {
+        require(!doesExist[genreName], "Genre name already exists");
+        genres.push(genreName);
+        doesExist[genreName] = true;
     }
-    
-    function VoteAGenre(bytes32 _genreName) external payable {
-        assert(doesExist[_genreName] && (block.timestamp < deadline) && !voted[keccak256(abi.encodePacked(msg.sender,votingID))]);
-        voters.push(keccak256(abi.encodePacked(msg.sender,votingID)));
-        voted[keccak256(abi.encodePacked(msg.sender,votingID))] = true;
-        votes[_genreName]++;
+
+    function removeGenre(uint256 index, bytes32 genreName) external onlyOwner {
+        require(doesExist[genreName], "Genre name does not exist");
+        require(genres[index] == genreName, "Index and genre do not match");
+        if (index >= genres.length) return;
+
+        for (uint256 i = index; i < genres.length - 1; i++) {
+            genres[i] = genres[i + 1];
+        }
+        delete genres[genres.length - 1];
+        doesExist[genreName] = false;
     }
-    
-    function StartVoting(uint _time) external onlyOwner{
-        //time in seconds
+
+    function startRound(uint256 _deadline) external onlyOwner {
         votingID++;
-        deadline = block.timestamp + _time;
+        VotingRound storage newRound = rounds.push();
+        newRound.id = votingID;
+        newRound.deadline = _deadline;
+        newRound.genres = genres;
+        newRound.votes = new uint256[](genres.length);
     }
 
-    function EndVoting() external onlyOwner{
-        deadline = block.timestamp;
-    }
-    
-    function CheckRemainingTime() external view returns (uint){
-        return deadline - block.timestamp;
-    }
-    
-    function IsVoting() external view returns (bool){
-        return block.timestamp < deadline;
-    }
-    
-    function WinningGenres() external view returns (bytes32[] memory){
-        uint[] memory voteCount = new uint[](genres.length);
-        for(uint i = 0; i<genres.length; i++) {
-            voteCount[i] = votes[genres[i]];
-        }
-        bytes32[] memory sortedGenres = new bytes32[](genres.length);
-        (voteCount, sortedGenres) = sort(voteCount, genres);
-        bytes32[] memory winningGenres = new bytes32[](3);
-        winningGenres[2] = sortedGenres[sortedGenres.length-1];
-        winningGenres[1] = sortedGenres[sortedGenres.length-2];
-        winningGenres[0] = sortedGenres[sortedGenres.length-3];
-        return winningGenres;
-    }
-    
-    function sort(uint[] memory intArr, bytes32[] memory strArr) public pure returns (uint[] memory, bytes32[] memory){
-        if (intArr.length > 0)
-            quickSort(intArr, 0, intArr.length - 1, strArr);
-        return (intArr, strArr);
+    function endRound(uint256 id) external onlyOwner {
+        VotingRound storage round = rounds[id];
+        round.deadline = block.timestamp;
     }
 
-    function quickSort(uint[] memory arr, uint left, uint right, bytes32[] memory strArr) public pure {
-        if (left >= right)
-            return;
-        uint p = arr[(left + right) / 2];   // p = the pivot element
-        uint i = left;
-        uint j = right;
-        while (i < j) {
-            while (arr[i] < p) ++i;
-            while (arr[j] > p) --j;         // arr[j] > p means p still to the left, so j > 0
-            if (arr[i] > arr[j]) {
-                (arr[i], arr[j]) = (arr[j], arr[i]);
-                (strArr[i], strArr[j]) = (strArr[j], strArr[i]);
+    function voteGenre(
+        uint256 id,
+        uint256 genreIndex,
+        bytes32 genreName
+    ) external {
+        VotingRound storage round = rounds[id];
+        require(
+            round.genres[genreIndex] == genreName,
+            "Index and genre do not match"
+        );
+        require(!round.isVoted[msg.sender], "Already voted");
+        round.isVoted[msg.sender] = true;
+        round.votes[genreIndex]++;
+    }
+
+    function revokeVote(
+        uint256 id,
+        uint256 genreIndex,
+        bytes32 genreName
+    ) external {
+        VotingRound storage round = rounds[id];
+        require(
+            round.genres[genreIndex] == genreName,
+            "Index and genre do not match"
+        );
+        require(round.isVoted[msg.sender], "Already not voted");
+        round.isVoted[msg.sender] = false;
+        round.votes[genreIndex]--;
+    }
+
+    function checkRemainingTime(uint256 id) external view returns (uint256) {
+        VotingRound storage round = rounds[id];
+        return (round.deadline - block.timestamp);
+    }
+
+    function winningGenres(uint256 id) external onlyOwner{
+        VotingRound storage round = rounds[id];
+        require(
+            block.timestamp >= round.deadline,
+            "Round has not finished yet"
+        );
+
+        uint256 pos_1;
+        uint256 pos_2;
+        uint256 pos_3;
+
+        bytes32 firstPlace;
+        bytes32 secondPlace;
+        bytes32 thirdPlace;
+
+        for (uint256 i; i < round.votes.length; i++) {
+            if (round.votes[i] >= pos_1) {
+                pos_3 = pos_2;
+                thirdPlace = secondPlace;
+                pos_2 = pos_1;
+                secondPlace = firstPlace;
+                pos_1 = round.votes[i];
+                firstPlace = round.genres[i];
+            } else if (round.votes[i] >= pos_2) {
+                pos_3 = pos_2;
+                thirdPlace = secondPlace;
+                pos_2 = round.votes[i];
+                secondPlace = round.genres[i];
+            } else if (round.votes[i] >= pos_3) {
+                pos_3 = round.votes[i];
+                thirdPlace = round.genres[i];
             }
-            else
-                ++i;
         }
-    
-        // Note --j was only done when a[j] > p.  So we know: a[j] == p, a[<j] <= p, a[>j] > p
-        if (j > left)
-            quickSort(arr, left, j - 1, strArr);    // j > left, so j > 0
-        quickSort(arr, j + 1, right,strArr);
+
+        round.winners = [firstPlace, secondPlace, thirdPlace];
+    }
+
+    function getRoundInfo(uint256 id)
+        external
+        view
+        returns (
+            uint256,
+            bytes32[] memory,
+            uint256[] memory,
+            uint256,
+            bytes32[3] memory
+        )
+    {
+        VotingRound storage round = rounds[id];
+        return (
+            round.id,
+            round.genres,
+            round.votes,
+            round.deadline,
+            round.winners
+        );
+    }
+
+    function getGenres() external view returns (bytes32[] memory) {
+        return genres;
     }
 }
