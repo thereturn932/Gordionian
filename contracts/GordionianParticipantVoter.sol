@@ -9,11 +9,12 @@ contract GordionianParticipantVoter is Ownable {
     uint256 votingID;
 
     struct Film {
-        bytes32 title;
+        string title;
         address creator;
         bytes32 creatorName;
         uint256 votingSeason;
         uint256 participantID;
+        uint requiredInvestment;
         bytes32 movieURL;
         bytes32 contactEMail;
     }
@@ -24,28 +25,22 @@ contract GordionianParticipantVoter is Ownable {
         uint256[] votes;
         uint256 deadline;
         mapping(address => bool) isVoted;
-        bytes32[3] winners;
+        string[3] winners;
     }
 
     VotingRound[] private rounds;
     mapping(uint => Film) private winners;
 
-    IERC20 GRD;
 
     event NewParticipant(
-        bytes32 _title,
+        string _title,
         bytes32 _creatorName,
         bytes32 _movieURL,
         uint256 participantID
     );
 
-    constructor(address _GRDAddress) {
-        GRD = IERC20(_GRDAddress);
+    constructor() {
         rounds.push();
-    }
-
-    function DefineGRD(address _GRDAddress) external onlyOwner {
-        GRD = IERC20(_GRDAddress);
     }
 
     function startRound(uint256 _deadline) external onlyOwner {
@@ -107,9 +102,9 @@ contract GordionianParticipantVoter is Ownable {
         uint256 pos_2;
         uint256 pos_3;
 
-        bytes32 firstPlace;
-        bytes32 secondPlace;
-        bytes32 thirdPlace;
+        string memory firstPlace;
+        string memory secondPlace;
+        string memory thirdPlace;
 
         Film memory winner;
 
@@ -145,7 +140,7 @@ contract GordionianParticipantVoter is Ownable {
             uint256,
             uint256[] memory,
             uint256,
-            bytes32[3] memory
+            string[3] memory
         )
     {
         VotingRound storage round = rounds[id];
@@ -159,9 +154,10 @@ contract GordionianParticipantVoter is Ownable {
     }
 
     function NewParticipation(
-        bytes32 _title,
+        string calldata _title,
         bytes32 _creatorName,
         bytes32 _movieURL,
+        uint _requiredInvestment,
         bytes32 _contactEMail,
         uint256 roundID
     ) external {
@@ -172,6 +168,7 @@ contract GordionianParticipantVoter is Ownable {
         newParticipant.movieURL = _movieURL;
         newParticipant.votingSeason = votingID;
         newParticipant.participantID = round.films.length;
+        newParticipant.requiredInvestment = _requiredInvestment;
         newParticipant.creator = msg.sender;
         newParticipant.creatorName = _creatorName;
         newParticipant.contactEMail = _contactEMail;
@@ -189,8 +186,8 @@ contract GordionianParticipantVoter is Ownable {
         delete round.votes[_participantID];
     }
 
-    function getWinner(uint roundID) external view returns (bytes32, address, bytes32, uint,uint,bytes32,bytes32) {
+    function getWinner(uint roundID) external view returns (string memory, address, bytes32, uint,uint,uint,bytes32,bytes32) {
         Film storage winner = winners[roundID];
-        return (winner.title,winner.creator,winner.creatorName,winner.votingSeason,winner.participantID,winner.movieURL,winner.contactEMail);
+        return (winner.title,winner.creator,winner.creatorName,winner.votingSeason,winner.participantID,winner.requiredInvestment,winner.movieURL,winner.contactEMail);
     } 
 }
